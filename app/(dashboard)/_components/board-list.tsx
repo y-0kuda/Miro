@@ -12,7 +12,7 @@ interface BoardListProps {
   };
 }
 
-export const BoardList = ({ orgId, query }: BoardListProps) => {
+export const BoardList = ({ query }: BoardListProps) => {
   const data = []; // todo: change to api call
 
   // 検索バーで探したが見つからなかったとき
