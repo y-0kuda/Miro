@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { EmptyBoards } from "./empty-boards";
 import { EmptyFavorites } from "./empty-favorites";
 import { EmptySearch } from "./empty-search";
@@ -13,16 +14,18 @@ interface BoardListProps {
 }
 export const BoardList = ({ query }: BoardListProps) => {
   const data = []; // todo: change to api call
-  console.log("query.search", query.search);
-  console.log("query.favorites", query.favorites);
+
+  const searchParams = useSearchParams();
+  const search = searchParams.get("search");
+  const favorites = searchParams.get("favorites");
 
   // 検索バーで探したが見つからなかったとき
-  if (!data?.length && query.search) {
+  if (!data?.length && search) {
     return <EmptySearch />;
   }
 
   // Favorite Boradsをクリックしたが、お気に入りがなかったとき
-  if (!data?.length && query.favorites) {
+  if (!data?.length && favorites) {
     return <EmptyFavorites />;
   }
 
