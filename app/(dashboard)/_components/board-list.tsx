@@ -11,9 +11,10 @@ interface BoardListProps {
     favorites?: string;
   };
 }
-
 export const BoardList = ({ query }: BoardListProps) => {
   const data = []; // todo: change to api call
+  console.log("query.search", query.search);
+  console.log("query.favorites", query.favorites);
 
   // 検索バーで探したが見つからなかったとき
   if (!data?.length && query.search) {
