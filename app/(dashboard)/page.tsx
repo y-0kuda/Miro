@@ -17,7 +17,7 @@ const DashboardPage = ({ searchParams }: DashboardPageProps) => {
   const { organization } = useOrganization();
   return (
     // navbarの分は高さから引く
-    <div className="flex-1 h-[calc(100%-80px)]">
+    <div className="flex-1 h-[calc(100%-80px)] p-6">
       {!organization ? (
         <EmptyOrg />
       ) : (
