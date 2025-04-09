@@ -20,6 +20,33 @@ export const get = query({
       .order("desc")
       .collect();
 
-    return boards;
+    const boardsWithFavoriteRelation = boards.map((board) => {
+      return (
+        ctx.db
+          .query("userFavorites")
+          .withIndex("by_user_board", (q) =>
+            q.eq("userId", identity.subject).eq("boardId", board._id)
+          )
+          .unique()
+          // userFavoritesテーブルの中で、userIdとboardIdが一致するデータを一つとってくる
+          // もしデータがあれば、そのboardのisFavoriteをtrueにし、なければfalseとする
+          .then((favorite) => {
+            return {
+              ...board,
+              // !!favoriteはtrue/falseを得るための手法
+              // favoriteがnullであればfalseが返る
+              // favoriteに値があればtrueが返る
+              // このisFavoriteはお気に入りの操作（マークの動的な変化やDBへの操作）に使われる（ex: board-list.tsx）
+              // boardsテーブルとuserFavoritesテーブルが結びついてisFavoriteがコンポーネントで使われる
+              isFavorite: !!favorite,
+            };
+          })
+      );
+    });
+
+    // favoriteを関連させた状態を作成する
+    const boardsWithFavoriteBoolean = Promise.all(boardsWithFavoriteRelation);
+
+    return boardsWithFavoriteBoolean;
   },
 });

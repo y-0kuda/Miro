@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { toast } from "sonner";
 import { useAuth } from "@clerk/nextjs";
 import { MoreHorizontal } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/convex/_generated/api";
 import { Actions } from "@/components/actions";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useApiMutation } from "@/hooks/use-api-mutation";
 
 import { Overlay } from "./overlay";
 import { Footer } from "./footer";
@@ -43,6 +46,26 @@ export const BoardCard = ({
   // addSuffixをtrueにすると、agoがつく
   const createdAtLabel = formatDistanceToNow(createdAt, { addSuffix: true });
 
+  const { mutate: onFavorite, pending: pendingFavorite } = useApiMutation(
+    api.board.favorite
+  );
+
+  const { mutate: onUnFavorite, pending: pendingUnFavorite } = useApiMutation(
+    api.board.unfavorite
+  );
+
+  const toggleFavorite = () => {
+    if (isFavorite) {
+      // boardのidがあれば、favoriteから外せる
+      onUnFavorite({ id }).catch(() => toast.error("Failed to Add Favorites"));
+    } else {
+      // orgのIdとboardのidがあれば、favoriteに追加できる
+      onFavorite({ id, orgId }).catch(() =>
+        toast.error("Failed to Remove from Favorites")
+      );
+    }
+  };
+
   return (
     <Link href={`/board/${id}`}>
       {/* groupがあてられているため、Overlayに含まれるgroup-hoverが適用されて大きなdivのくくりでデザインが適応される、 */}
@@ -63,8 +86,8 @@ export const BoardCard = ({
           title={title}
           authorLabel={authorLabel}
           createdAtLabel={createdAtLabel}
-          onClick={() => {}}
-          disabled={false}
+          onClick={toggleFavorite}
+          disabled={pendingFavorite || pendingUnFavorite}
         />
       </div>
     </Link>
