@@ -11,7 +11,7 @@ export default defineSchema({
   })
     // by_orgはconvexで設定されたもので、orgIdをそれに該当させる
     .index("by_org", ["orgId"])
-    .searchIndex("serch_title", {
+    .searchIndex("search_title", {
       // convexで設定されたsearchFiledとfilterFieldsはそれぞれを該当させる
       searchField: "title",
       filterFields: ["orgId"],

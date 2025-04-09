@@ -57,7 +57,21 @@ export const remove = mutation({
       throw new Error("Unauthorized");
     }
 
-    // todo: delete favorite relations as well
+    const userId = identity.subject;
+
+    // userIdとboardIdから既存のお気に入りのboardがあるかチェックする
+    const existingFavorite = await ctx.db
+      .query("userFavorites")
+      .withIndex("by_user_board", (q) =>
+        q.eq("userId", userId).eq("boardId", args.id)
+      )
+      .unique();
+
+    // userIdと削除するboardIdがお気に入りに入っていれば、それをuserFacoritesテーブルから削除
+    // boardを削除したがお気に入りは削除されていないことを防ぐ
+    if (existingFavorite) {
+      await ctx.db.delete(existingFavorite._id);
+    }
 
     await ctx.db.delete(args.id);
   },
@@ -113,8 +127,8 @@ export const favorite = mutation({
     // userFavoritesテーブルに入っているboardはお気に入りに追加されているもの
     const existingFavorite = await ctx.db
       .query("userFavorites")
-      .withIndex("by_user_board_org", (q) =>
-        q.eq("userId", userId).eq("boardId", board._id).eq("orgId", args.orgId)
+      .withIndex("by_user_board", (q) =>
+        q.eq("userId", userId).eq("boardId", board._id)
       )
       .unique();
 
