@@ -11,7 +11,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     // ブロックが白なので、背景に少し色を足すためにbg-neutral-100を追加する
     // touch-noneはブラウザの上下のスクロールを無効にし、スクロールを自作できるようにする
     <main className="h-full w-full relative bg-neutral-100 touch-none">
-      <Info />
+      <Info boardId={boardId} />
       <Participants />
       <Toolbar />
     </main>
