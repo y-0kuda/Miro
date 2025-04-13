@@ -1,6 +1,6 @@
 "use client";
 
-import { nanoid, nanoId } from "nanoid";
+import { nanoid } from "nanoid";
 import { useCallback, useState } from "react";
 import {
   useHistory,
