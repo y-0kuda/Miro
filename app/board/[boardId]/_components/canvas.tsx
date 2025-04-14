@@ -1,13 +1,14 @@
 "use client";
 
 import { nanoid } from "nanoid";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   useHistory,
   useCanUndo,
   useCanRedo,
   useMutation,
-  useStorage, // ユーザーの変更をroom内の他のユーザーに知らせるためのhooks
+  useStorage,
+  useOthersMapped, // ユーザーの変更をroom内の他のユーザーに知らせるためのhooks
 } from "@/liveblocks.config";
 import { LiveObject } from "@liveblocks/client";
 
@@ -19,7 +20,7 @@ import {
   LayerType,
   Point,
 } from "@/types/canvas";
-import { pointerEventToCanvasPoint } from "@/lib/utils";
+import { connectionIdToColor, pointerEventToCanvasPoint } from "@/lib/utils";
 
 import { Info } from "./info";
 import { Toolbar } from "./toolbar";
@@ -135,11 +136,59 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         });
       }
 
-      // histroyへの記録を再開する
+      // historyへの記録を再開する
       history.resume();
     },
     [camera, canvasState, history, insertLayer]
   );
+
+  const onLayerPointerDown = useMutation(
+    ({ self, setMyPresence }, e: React.PointerEvent, layerId: string) => {
+      // 何か図形を入力しているときかペンで描画しているときはこの関数は発火しない
+      if (
+        canvasState.mode === CanvasMode.Inserting ||
+        canvasState.mode === CanvasMode.Pencil
+      ) {
+        return;
+      }
+
+      // 図形の選択のundo, redoはできないようにする
+      history.pause();
+      e.stopPropagation();
+
+      // カメラの位置とカーソルの位置を比較して現在のポインタの場所を取得
+      const point = pointerEventToCanvasPoint(e, camera);
+
+      // クリックしたlayerがselectionに含まれていない場合
+      if (!self.presence.selection.includes(layerId)) {
+        // そのlayerをselectionに加え、undo, redoできるようにする
+        setMyPresence({ selection: [layerId] }, { addToHistory: true });
+      }
+      // Translating（動かす）モードに設定する
+      setCanvasState({ mode: CanvasMode.Translating, current: point });
+    },
+    [setCanvasState, camera, history, canvasState.mode]
+  );
+
+  // 誰が編集をしているかを分かるようにする
+  // selectionはliveblocks.config.tsに定義されている
+  const selections = useOthersMapped((other) => other.presence.selection);
+
+  const layerIdsToColorSelection = useMemo(() => {
+    // Recordはtypescriptから提供されている、オブジェクトのキーと値の型を指定するための型
+    const layerIdsToColorSelection: Record<string, string> = {};
+
+    for (const user of selections) {
+      const [connectionId, selection] = user;
+
+      for (const layerId of selection) {
+        // layerIdに紐づいた色をRecord型に入れる
+        layerIdsToColorSelection[layerId] = connectionIdToColor(connectionId);
+      }
+    }
+
+    return layerIdsToColorSelection;
+  }, [selections]);
 
   return (
     // ブロックが白なので、背景に少し色を足すためにbg-neutral-100を追加する
@@ -171,9 +220,9 @@ export const Canvas = ({ boardId }: CanvasProps) => {
             <LayerPreview
               key={layerId}
               id={layerId}
-              onLayerPointerDown={() => {}}
+              onLayerPointerDown={onLayerPointerDown}
               // 他の人が編集しているのがわかるように使われる色
-              selectionColor="#000"
+              selectionColor={layerIdsToColorSelection[layerId]}
             />
           ))}
           <CursorsPresence />
