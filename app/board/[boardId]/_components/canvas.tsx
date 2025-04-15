@@ -19,8 +19,14 @@ import {
   Color,
   LayerType,
   Point,
+  Side,
+  XYWH,
 } from "@/types/canvas";
-import { connectionIdToColor, pointerEventToCanvasPoint } from "@/lib/utils";
+import {
+  connectionIdToColor,
+  pointerEventToCanvasPoint,
+  resizeBounds,
+} from "@/lib/utils";
 
 import { Info } from "./info";
 import { Toolbar } from "./toolbar";
@@ -39,6 +45,8 @@ export const Canvas = ({ boardId }: CanvasProps) => {
   // rootにはroomに関する様々な情報（layer, width, heightなど）があり、その中のlayerIdsを取得
   const layerIds = useStorage((root) => root.layerIds);
 
+  // setCanvasStateはオブジェクトを受け付ける
+  // ({})となっており、中にはいる情報は一つではない
   const [canvasState, setCanvasState] = useState<CanvasState>({
     mode: CanvasMode.None,
   });
@@ -99,6 +107,47 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     [lastUsedColor]
   );
 
+  const resizeSelectedLayer = useMutation(
+    // pointはonPointerMoveの中でcurrentを入れるのに使う。
+    ({ storage, self }, point: Point) => {
+      // リサイズではないとき
+      if (canvasState.mode !== CanvasMode.Resizing) {
+        return;
+      }
+
+      const bounds = resizeBounds(
+        canvasState.initialBounds,
+        canvasState.corner,
+        point
+      );
+
+      const liveLayers = storage.get("layers");
+      const layer = liveLayers.get(self.presence.selection[0]);
+
+      if (layer) {
+        layer.update(bounds);
+      }
+    },
+    [canvasState]
+  );
+
+  // 図形の枠のリサイズ部分をクリックしたとき
+  const onResizeHandlePointerDown = useCallback(
+    // このファイルからselection-box.tsxにはcorner, initialBoundsという型が決まった変数のみ渡す
+    (corner: Side, initialBounds: XYWH) => {
+      // リサイズ中はhistoryに追加しない
+      history.pause();
+      // setCanvasStateは「オブジェクト」を格納する
+      // modeだけを受け付けるわけではない
+      setCanvasState({
+        mode: CanvasMode.Resizing,
+        initialBounds,
+        corner,
+      });
+    },
+    [history]
+  );
+
   // カーソルの動きに合わせてカメラ（roomの中心の点）も変更する
   const onWheel = useCallback((e: React.WheelEvent) => {
     setCamera((camera) => ({
@@ -113,9 +162,13 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       e.preventDefault();
       const current = pointerEventToCanvasPoint(e, camera);
 
+      if (canvasState.mode === CanvasMode.Resizing) {
+        resizeSelectedLayer(current);
+      }
+
       setMyPresence({ cursor: current });
     },
-    []
+    [camera, canvasState, resizeSelectedLayer]
   );
 
   // カーソルが画面外に出たときに、roomからカーソルを消す
@@ -227,7 +280,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
             />
           ))}
           {/* 自分で選んだ図形に外枠をつける */}
-          <SelectionBox onResizeHandlePointerDown={() => {}} />
+          <SelectionBox onResizeHandlePointerDown={onResizeHandlePointerDown} />
           <CursorsPresence />
         </g>
       </svg>
