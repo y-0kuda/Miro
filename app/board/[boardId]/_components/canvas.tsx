@@ -34,6 +34,7 @@ import { Participants } from "./participants";
 import { CursorsPresence } from "./cursors-presence";
 import { LayerPreview } from "./layer-preview";
 import { SelectionBox } from "./selection-box";
+import { SelectionTools } from "./selection-tools";
 
 const MAX_LAYERS = 100;
 
@@ -329,6 +330,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         canUndo={canUndo}
         canRedo={canRedo}
       />
+      <SelectionTools camera={camera} setLastUsedColor={setLastUsedColor} />
       {/* キャンバス内のカーソルの描画や図形の配置等を行う部分 */}
       <svg
         className="h-[100vh] w-[100vh]"
