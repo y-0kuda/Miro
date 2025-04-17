@@ -107,6 +107,49 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     [lastUsedColor]
   );
 
+  const translateSelectedLayers = useMutation(
+    ({ storage, self }, point: Point) => {
+      if (canvasState.mode !== CanvasMode.Translating) {
+        return;
+      }
+
+      const offset = {
+        // point.x: ドラッグをして動かした後の座標
+        // canvasState.current.x: ドラッグをして動かす前の座標
+        x: point.x - canvasState.current.x,
+        y: point.y - canvasState.current.y,
+      };
+
+      const liveLayers = storage.get("layers");
+
+      // 選んだlayerのid
+      for (const id of self.presence.selection) {
+        // 選んだlayerのidを元にしてlayerの情報を得る
+        const layer = liveLayers.get(id);
+
+        // layerがあれば位置を更新
+        if (layer) {
+          layer.update({
+            x: layer.get("x") + offset.x,
+            y: layer.get("y") + offset.y,
+          });
+        }
+      }
+
+      // canvas.tsの中でmodeとcurrentという型を決めており、それに従って値を入れている
+      // pointは動かした後の座標
+      setCanvasState({ mode: CanvasMode.Translating, current: point });
+    },
+    [canvasState]
+  );
+
+  const unselectedLayers = useMutation(({ self, setMyPresence }) => {
+    // layerを選択している状態のとき
+    if (self.presence.selection.length > 0) {
+      setMyPresence({ selection: [] }, { addToHistory: true });
+    }
+  }, []);
+
   const resizeSelectedLayer = useMutation(
     // pointはonPointerMoveの中でcurrentを入れるのに使う。
     ({ storage, self }, point: Point) => {
@@ -162,13 +205,16 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       e.preventDefault();
       const current = pointerEventToCanvasPoint(e, camera);
 
-      if (canvasState.mode === CanvasMode.Resizing) {
+      // onPointerDown()でCanvasMode.Translatingになる
+      if (canvasState.mode === CanvasMode.Translating) {
+        translateSelectedLayers(current);
+      } else if (canvasState.mode === CanvasMode.Resizing) {
         resizeSelectedLayer(current);
       }
 
       setMyPresence({ cursor: current });
     },
-    [camera, canvasState, resizeSelectedLayer]
+    [camera, canvasState, translateSelectedLayers, resizeSelectedLayer]
   );
 
   // カーソルが画面外に出たときに、roomからカーソルを消す
@@ -176,13 +222,36 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     setMyPresence({ cursor: null });
   }, []);
 
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      const point = pointerEventToCanvasPoint(e, camera);
+
+      if (canvasState.mode === CanvasMode.Inserting) {
+        return;
+      }
+
+      // todo: add drawing function
+
+      setCanvasState({ origin: point, mode: CanvasMode.Pressing });
+    },
+    [camera, canvasState.mode, setCanvasState]
+  );
+
   // 図形が選択されたときに発火する
   const onPointerUp = useMutation(
     ({}, e) => {
       // カーソルの位置とカメラの位置でどこに図形を挿入するかを決める
       const point = pointerEventToCanvasPoint(e, camera);
 
-      if (canvasState.mode === CanvasMode.Inserting) {
+      if (
+        // canvasStateはcanvas.tsxで定義したもの
+        // CanvasModeはcanvas.tsで定義したもの
+        canvasState.mode === CanvasMode.None ||
+        canvasState.mode === CanvasMode.Pressing
+      ) {
+        unselectedLayers();
+        setCanvasState({ mode: CanvasMode.None });
+      } else if (canvasState.mode === CanvasMode.Inserting) {
         insertLayer(canvasState.layerType, point);
       } else {
         setCanvasState({
@@ -193,7 +262,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       // historyへの記録を再開する
       history.resume();
     },
-    [camera, canvasState, history, insertLayer]
+    [camera, canvasState, history, unselectedLayers, insertLayer]
   );
 
   const onLayerPointerDown = useMutation(
@@ -266,6 +335,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         onWheel={onWheel}
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerLeave}
+        onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
       >
         {/* 動的に表示を変更する際に使われる */}
