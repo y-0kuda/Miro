@@ -23,6 +23,10 @@ export const LayerPreview = memo(
     }
 
     switch (layer.type) {
+      case LayerType.Text:
+        return <div>text</div>;
+      case LayerType.Note:
+        return <div>note</div>;
       case LayerType.Rectangle:
         return (
           <Rectangle
@@ -32,6 +36,8 @@ export const LayerPreview = memo(
             selectionColor={selectionColor}
           />
         );
+      case LayerType.Ellipse:
+        return <div>Ellipse</div>;
       default:
         console.warn("unknown type error");
         return null;

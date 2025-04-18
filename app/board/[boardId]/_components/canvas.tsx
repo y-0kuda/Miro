@@ -24,6 +24,7 @@ import {
 } from "@/types/canvas";
 import {
   connectionIdToColor,
+  findIntersectingLayersWithRectangle,
   pointerEventToCanvasPoint,
   resizeBounds,
 } from "@/lib/utils";
@@ -151,6 +152,43 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     }
   }, []);
 
+  const updateSelectionNet = useMutation(
+    ({ storage, setMyPresence }, current: Point, origin: Point) => {
+      // toImmutableでliveblocksの保存形式から、javascriptの編集しやすい形に変更される
+      const layers = storage.get("layers").toImmutable();
+      setCanvasState({
+        mode: CanvasMode.SelectionNet,
+        origin,
+        current,
+      });
+
+      // 選択中は、layerIds, layers, originは変わらない
+      // onPointerMoveにより、常にcurrentは更新され、それがこの関数に入る
+      // 最終的に選択に含まれるlayerのidが返される
+      const ids = findIntersectingLayersWithRectangle(
+        layerIds,
+        layers,
+        origin,
+        current
+      );
+
+      setMyPresence({ selection: ids });
+    },
+    [layerIds]
+  );
+
+  const startMultilSelection = useCallback((current: Point, origin: Point) => {
+    // この値をif文を満たすときに複数選択を始めたとみなす
+    // しきい値を設定し、クリックとの区別をする
+    if (Math.abs(current.x - origin.x) + Math.abs(current.y - origin.y) > 5) {
+      setCanvasState({
+        mode: CanvasMode.SelectionNet,
+        origin,
+        current,
+      });
+    }
+  }, []);
+
   const resizeSelectedLayer = useMutation(
     // pointはonPointerMoveの中でcurrentを入れるのに使う。
     ({ storage, self }, point: Point) => {
@@ -206,8 +244,14 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       e.preventDefault();
       const current = pointerEventToCanvasPoint(e, camera);
 
-      // onPointerDown()でCanvasMode.Translatingになる
-      if (canvasState.mode === CanvasMode.Translating) {
+      if (canvasState.mode === CanvasMode.Pressing) {
+        // current（移動後の座標）とonPointerDownのsetCanvasStateで入った、canvasStateのorigin（移動前の座標）を使用する
+        startMultilSelection(current, canvasState.origin);
+      } else if (canvasState.mode === CanvasMode.SelectionNet) {
+        updateSelectionNet(current, canvasState.origin);
+      }
+      // onLayerPointerDown()でCanvasMode.Translatingになる
+      else if (canvasState.mode === CanvasMode.Translating) {
         translateSelectedLayers(current);
       } else if (canvasState.mode === CanvasMode.Resizing) {
         resizeSelectedLayer(current);
@@ -240,6 +284,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
 
   // 図形が選択されたときに発火する
   const onPointerUp = useMutation(
+    // eslint-disable-next-line
     ({}, e) => {
       // カーソルの位置とカメラの位置でどこに図形を挿入するかを決める
       const point = pointerEventToCanvasPoint(e, camera);
@@ -353,6 +398,22 @@ export const Canvas = ({ boardId }: CanvasProps) => {
           ))}
           {/* 自分で選んだ図形に外枠をつける */}
           <SelectionBox onResizeHandlePointerDown={onResizeHandlePointerDown} />
+          {/* 図形を選択中で、元の座標から移動した移動後の座標がある場合 */}
+          {canvasState.mode === CanvasMode.SelectionNet &&
+            canvasState.current != null && (
+              <rect
+                // /5の5の部分の数字が小さいほど、色が濃くなる（黒に近づく）
+                className="fill-blue-500/5 stroke-blue-500 stroke-1"
+                // 始点と終点でより左側にある方
+                x={Math.min(canvasState.origin.x, canvasState.current.x)}
+                // 始点と終点でより上側にある方
+                y={Math.min(canvasState.origin.y, canvasState.current.y)}
+                // 始点と終点の距離
+                width={Math.abs(canvasState.origin.x - canvasState.current.x)}
+                // 始点と終点の距離
+                height={Math.abs(canvasState.origin.y - canvasState.current.y)}
+              />
+            )}
           <CursorsPresence />
         </g>
       </svg>
