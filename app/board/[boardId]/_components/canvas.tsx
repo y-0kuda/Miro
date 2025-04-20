@@ -1,14 +1,15 @@
 "use client";
 
 import { nanoid } from "nanoid";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import {
   useHistory,
   useCanUndo,
   useCanRedo,
   useMutation,
   useStorage,
-  useOthersMapped, // ユーザーの変更をroom内の他のユーザーに知らせるためのhooks
+  useOthersMapped,
+  useSelf, // ユーザーの変更をroom内の他のユーザーに知らせるためのhooks
 } from "@/liveblocks.config";
 import { LiveObject } from "@liveblocks/client";
 
@@ -23,13 +24,18 @@ import {
   XYWH,
 } from "@/types/canvas";
 import {
+  colorToCss,
   connectionIdToColor,
   findIntersectingLayersWithRectangle,
+  penPointsToPathLayer,
   pointerEventToCanvasPoint,
   resizeBounds,
 } from "@/lib/utils";
+import { useDeleteLayers } from "@/hooks/use-delete-layers";
+import { useDisableScrollBounce } from "@/hooks/use-disable-scroll-bounce";
 
 import { Info } from "./info";
+import { Path } from "./path";
 import { Toolbar } from "./toolbar";
 import { Participants } from "./participants";
 import { CursorsPresence } from "./cursors-presence";
@@ -46,6 +52,7 @@ interface CanvasProps {
 export const Canvas = ({ boardId }: CanvasProps) => {
   // rootにはroomに関する様々な情報（layer, width, heightなど）があり、その中のlayerIdsを取得
   const layerIds = useStorage((root) => root.layerIds);
+  const pencilDraft = useSelf((me) => me.presence.pencilDraft);
 
   // setCanvasStateはオブジェクトを受け付ける
   // ({})となっており、中にはいる情報は一つではない
@@ -62,6 +69,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     b: 0,
   });
 
+  useDisableScrollBounce();
   const history = useHistory();
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
@@ -189,6 +197,81 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     }
   }, []);
 
+  const continueDrawing = useMutation(
+    ({ self, setMyPresence }, point: Point, e: React.PointerEvent) => {
+      // startDrawing()内で定義したペンの最初の部分
+      const { pencilDraft } = self.presence;
+
+      if (
+        canvasState.mode !== CanvasMode.Pencil ||
+        // デバイスのどの部分が押されているかが数字で渡される
+        // 1は主ボタンである左クリックを意味する
+        e.buttons !== 1 ||
+        pencilDraft === null
+      ) {
+        return null;
+      }
+
+      setMyPresence({
+        // カーソルの位置
+        cursor: point,
+        // ペンで描いている途中の線
+        pencilDraft:
+          // 今のpencilDraftの最初の点とpointが同じなら
+          pencilDraft.length === 1 &&
+          pencilDraft[0][0] === point.x &&
+          pencilDraft[0][1] === point.y
+            ? // 何もせずそのままpencilDraftを使う
+              pencilDraft
+            : // 新しい点を追加する
+              [...pencilDraft, [point.x, point.y, e.pressure]],
+      });
+    },
+    [canvasState.mode]
+  );
+
+  const insertPath = useMutation(({ storage, self, setMyPresence }) => {
+    const liveLayers = storage.get("layers");
+    const { pencilDraft } = self.presence;
+
+    if (
+      pencilDraft == null ||
+      // pencilDraftの中の要素が0または1のとき
+      // 点は二つ以上ないと線にできないのでここでチェックをする
+      pencilDraft.length < 2 ||
+      liveLayers.size >= MAX_LAYERS
+    ) {
+      setMyPresence({ pencilDraft: null });
+      return;
+    }
+
+    const id = nanoid();
+    // ここでペンで描いたものをlayerに追加する
+    liveLayers.set(
+      id,
+      new LiveObject(penPointsToPathLayer(pencilDraft, lastUsedColor))
+    );
+
+    const liveLayerIds = storage.get("layerIds");
+    // 新しく作ったペンのlayerのidを入れる
+    liveLayerIds.push(id);
+
+    // 一筆書きで一つのlayerになる
+    // 一筆書きが終わるとpencilDraftはリセットされる
+    setMyPresence({ pencilDraft: null });
+  }, []);
+
+  const startDrawing = useMutation(
+    // pressureは筆圧を表し、マウスでは表現できないが、ペンタブレットなどで違いがわかる
+    ({ setMyPresence }, point: Point, pressure: number) => {
+      setMyPresence({
+        pencilDraft: [[point.x, point.y, pressure]],
+        penColor: lastUsedColor,
+      });
+    },
+    [lastUsedColor]
+  );
+
   const resizeSelectedLayer = useMutation(
     // pointはonPointerMoveの中でcurrentを入れるのに使う。
     ({ storage, self }, point: Point) => {
@@ -255,11 +338,21 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         translateSelectedLayers(current);
       } else if (canvasState.mode === CanvasMode.Resizing) {
         resizeSelectedLayer(current);
+      } else if (canvasState.mode === CanvasMode.Pencil) {
+        continueDrawing(current, e);
       }
 
       setMyPresence({ cursor: current });
     },
-    [camera, canvasState, translateSelectedLayers, resizeSelectedLayer]
+    [
+      camera,
+      canvasState,
+      startMultilSelection,
+      updateSelectionNet,
+      translateSelectedLayers,
+      resizeSelectedLayer,
+      continueDrawing,
+    ]
   );
 
   // カーソルが画面外に出たときに、roomからカーソルを消す
@@ -275,11 +368,13 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         return;
       }
 
-      // todo: add drawing function
-
+      if (canvasState.mode === CanvasMode.Pencil) {
+        startDrawing(point, e.pressure);
+        return;
+      }
       setCanvasState({ origin: point, mode: CanvasMode.Pressing });
     },
-    [camera, canvasState.mode, setCanvasState]
+    [camera, canvasState.mode, setCanvasState, startDrawing]
   );
 
   // 図形が選択されたときに発火する
@@ -297,6 +392,8 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       ) {
         unselectedLayers();
         setCanvasState({ mode: CanvasMode.None });
+      } else if (canvasState.mode === CanvasMode.Pencil) {
+        insertPath();
       } else if (canvasState.mode === CanvasMode.Inserting) {
         insertLayer(canvasState.layerType, point);
       } else {
@@ -308,7 +405,15 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       // historyへの記録を再開する
       history.resume();
     },
-    [camera, canvasState, history, unselectedLayers, insertLayer]
+    [
+      camera,
+      canvasState,
+      history,
+      unselectedLayers,
+      insertPath,
+      insertLayer,
+      setCanvasState,
+    ]
   );
 
   const onLayerPointerDown = useMutation(
@@ -358,6 +463,34 @@ export const Canvas = ({ boardId }: CanvasProps) => {
 
     return layerIdsToColorSelection;
   }, [selections]);
+
+  const deleteLayers = useDeleteLayers();
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      switch (e.key) {
+        case "z": {
+          // metakeyはmacのcommand
+          if (e.ctrlKey || e.metaKey) {
+            if (e.shiftKey) {
+              // ctrl or command + z + shift
+              history.redo();
+            } else {
+              // ctrl or command + z
+              history.undo();
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [deleteLayers, history]);
 
   return (
     // ブロックが白なので、背景に少し色を足すためにbg-neutral-100を追加する
@@ -415,6 +548,14 @@ export const Canvas = ({ boardId }: CanvasProps) => {
               />
             )}
           <CursorsPresence />
+          {pencilDraft != null && pencilDraft.length > 0 && (
+            <Path
+              points={pencilDraft}
+              fill={colorToCss(lastUsedColor)}
+              x={0}
+              y={0}
+            />
+          )}
         </g>
       </svg>
     </main>
