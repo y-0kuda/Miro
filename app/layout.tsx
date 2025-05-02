@@ -11,7 +11,7 @@ import { ModalProvider } from "@/components/modals/modal-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Miro",
+  title: "Board",
   description: "Online Collaborative Whiteboard",
 };
 

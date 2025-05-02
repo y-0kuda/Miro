@@ -44,7 +44,7 @@ export const Info = ({ boardId }: InfoProps) => {
       <Hint label="Back to Home" side="bottom" sideOffset={10}>
         <Button asChild variant="board" className="px-2">
           <Link href="/">
-            <Image src="/logo.svg" alt="logo" height="60" width="60" />
+            <Image src="/logo.svg" alt="logo" height="40" width="40" />
             {/* font.classNameでpoppinsを適用 */}
             <span
               className={cn(
@@ -52,7 +52,7 @@ export const Info = ({ boardId }: InfoProps) => {
                 font.className
               )}
             >
-              Miro
+              Board
             </span>
           </Link>
         </Button>
