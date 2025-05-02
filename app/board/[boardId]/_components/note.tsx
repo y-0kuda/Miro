@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Kalam } from "next/font/google";
 import ContentEditable, { ContentEditableEvent } from "react-contenteditable";
 
@@ -25,24 +26,68 @@ export const Note = ({
 }: NoteProps) => {
   const { x, y, width, height, fill, value } = layer;
 
+  // 参照を保持
+  const contentRef = useRef<HTMLDivElement>(null);
+
   const updateValue = useMutation(({ storage }, newValue: string) => {
     const liveLayers = storage.get("layers");
     liveLayers.get(id)?.set("value", newValue);
   }, []);
 
+  const [fontSize, setFontSize] = useState(12);
+
+  // テキストが要素内に収まるようにフォントサイズを調整（大きく・小さく）
+  const adjustFontSizeToFit = () => {
+    // div要素がelに入る
+    const el = contentRef.current;
+    if (!el) return;
+    
+    // 最大サイズは要素に比例
+    const maxFontSize = Math.min(width, height) * 0.4; 
+    let newFontSize = 8;
+
+    el.style.fontSize = `${newFontSize}px`;
+
+    // 少しずつフォントサイズを上げながら収まるか確認
+    while (
+      newFontSize < maxFontSize &&
+      // scrollHeightは文字の見えない部分を含めての高さ
+      // clientHeightは見えている枠の高さ
+      el.scrollHeight <= el.clientHeight &&
+      el.scrollWidth <= el.clientWidth
+    ) {
+      newFontSize += 1;
+      el.style.fontSize = `${newFontSize}px`;
+    }
+
+    // 最後に1増やしたときにオーバーしている可能性があるので戻す
+    newFontSize -= 1;
+    el.style.fontSize = `${newFontSize}px`;
+
+    setFontSize(newFontSize);
+  };
+
+  // テキスト変更時
   const handleContentChange = (e: ContentEditableEvent) => {
     updateValue(e.target.value);
+    // updateValueが終わった後にadjustFontSizeToFitを行うためにsetTimeoutを入れている
+    setTimeout(adjustFontSizeToFit, 0);
   };
 
-  const calculateFontSize = (width: number, height: number) => {
-    const maxFontSize = 96;
-    const scaleFactor = 0.15;
-    const fontSizeBasedOnHeight = height * scaleFactor;
-    const fontSizeBasedOnWidth = width * scaleFactor;
+  // 初期表示＆サイズ・テキスト変化時にフォント再調整
+  useEffect(() => {
+    setTimeout(adjustFontSizeToFit, 0);
+  }, [value, width, height]);
 
-    return Math.min(fontSizeBasedOnHeight, fontSizeBasedOnWidth, maxFontSize);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter") {
+      // ブラウザのデフォルト改行を防ぐ
+      e.preventDefault();
+      // <br> を挿入する
+      document.execCommand("insertLineBreak"); 
+    }
   };
-
+  
   return (
     <foreignObject
       x={x}
@@ -51,9 +96,8 @@ export const Note = ({
       height={height}
       onPointerDown={(e) => onPointerDown(e, id)}
       style={{
-        outline: selectionColor ? `1px solid ${selectionColor} ` : "none",
+        outline: selectionColor ? `1px solid ${selectionColor}` : "none",
       }}
-      // shadow要素全体、drop-shadowは要素の中身に影をつける
       className="shadow-md drop-shadow-xl"
     >
       <div
@@ -61,18 +105,25 @@ export const Note = ({
           width: "100%",
           height: "100%",
           backgroundColor: fill ? colorToCss(fill) : "#000",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <ContentEditable
-          html={value || "text"}
+          html={value || ""}
           onChange={handleContentChange}
+          innerRef={contentRef}
+          onKeyDown={handleKeyDown}
           className={cn(
-            "h-full w-full flex items-center justify-center text-center outline-none",
+            "w-full h-full p-2 text-center whitespace-pre-wrap break-words outline-none",
             font.className
           )}
           style={{
-            fontSize: calculateFontSize(width, height),
+            fontSize: `${fontSize}px`,
             color: fill ? getContrastingTextColor(fill) : "#000",
+            // はみ出し検出のため
+            overflow: "hidden", 
           }}
         />
       </div>
