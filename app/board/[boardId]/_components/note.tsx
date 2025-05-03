@@ -37,6 +37,8 @@ export const Note = ({
   const [fontSize, setFontSize] = useState(12);
 
   // テキストが要素内に収まるようにフォントサイズを調整（大きく・小さく）
+  // adjustFontSizeToFitは基本的にフォントサイズを小さくする関数。
+  // whileの条件を満たすときには文字を大きくするが、それ以外はuseEffectで関数が呼ばれるたびにフォントは小さくなる。
   const adjustFontSizeToFit = () => {
     // div要素がelに入る
     const el = contentRef.current;

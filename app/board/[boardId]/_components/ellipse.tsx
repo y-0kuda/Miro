@@ -27,7 +27,7 @@ export const Ellipse = ({
       // 楕円の横半径
       rx={layer.width / 2}
       // 楕円の縦半径
-      ry={layer.width / 2}
+      ry={layer.height / 2}
       fill={layer.fill ? colorToCss(layer.fill) : "#000"}
       stroke={selectionColor || "transparent"}
       strokeWidth="1"
