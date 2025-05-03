@@ -511,7 +511,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       <SelectionTools camera={camera} setLastUsedColor={setLastUsedColor} />
       {/* キャンバス内のカーソルの描画や図形の配置等を行う部分 */}
       <svg
-        className="h-[100vh] w-[100vh]"
+        className="h-[100vh] w-[100vw]"
         onWheel={onWheel}
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerLeave}
