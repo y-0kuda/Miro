@@ -259,7 +259,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     // 一筆書きで一つのlayerになる
     // 一筆書きが終わるとpencilDraftはリセットされる
     setMyPresence({ pencilDraft: null });
-  }, []);
+  }, [lastUsedColor]);
 
   const startDrawing = useMutation(
     // pressureは筆圧を表し、マウスでは表現できないが、ペンタブレットなどで違いがわかる
