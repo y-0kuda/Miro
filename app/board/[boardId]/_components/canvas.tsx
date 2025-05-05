@@ -69,6 +69,12 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     b: 0,
   });
 
+  // spaceを押しているかを保存する
+  const [space, setSpace] = useState(false);
+
+  // spaceを押して動く際の移動前の点を保存する
+  const [cameraPanOrigin, setCameraPanOrigin] = useState<Point | null>(null);
+
   useDisableScrollBounce();
   const history = useHistory();
   const canUndo = useCanUndo();
@@ -341,6 +347,16 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       } else if (canvasState.mode === CanvasMode.Pencil) {
         continueDrawing(current, e);
       }
+      else if (canvasState.mode === CanvasMode.Panning && cameraPanOrigin) {
+        const dx = e.clientX - cameraPanOrigin.x;
+        const dy = e.clientY - cameraPanOrigin.y;
+        setCamera((prev) => ({
+          x: prev.x + dx,
+          y: prev.y + dy,
+        }));
+        // 次の移動用に新たに値を設定
+        setCameraPanOrigin({ x: e.clientX, y: e.clientY });
+      }
 
       setMyPresence({ cursor: current });
     },
@@ -352,6 +368,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
       translateSelectedLayers,
       resizeSelectedLayer,
       continueDrawing,
+      space
     ]
   );
 
@@ -373,8 +390,15 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         return;
       }
       setCanvasState({ origin: point, mode: CanvasMode.Pressing });
+
+      // e.button === 0は左クリックされたかどうか
+      if (space && e.button === 0) {
+        setCanvasState({ mode: CanvasMode.Panning });
+        setCameraPanOrigin({ x: e.clientX, y: e.clientY });
+        return;
+      }
     },
-    [camera, canvasState.mode, setCanvasState, startDrawing]
+    [camera, canvasState.mode, setCanvasState, startDrawing, space]
   );
 
   // 図形が選択されたときに発火する
@@ -383,6 +407,11 @@ export const Canvas = ({ boardId }: CanvasProps) => {
     ({}, e) => {
       // カーソルの位置とカメラの位置でどこに図形を挿入するかを決める
       const point = pointerEventToCanvasPoint(e, camera);
+
+      if (canvasState.mode === CanvasMode.Panning) {
+        setCanvasState({ mode: CanvasMode.None });
+        setCameraPanOrigin(null);
+      }
 
       if (
         // canvasStateはcanvas.tsxで定義したもの
@@ -479,16 +508,31 @@ export const Canvas = ({ boardId }: CanvasProps) => {
               // ctrl or command + z
               history.undo();
             }
-            break;
           }
+          break;
+        }
+        case " ": { 
+          e.preventDefault(); 
+          setSpace(true);
+          break;
+        }
+      }
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      switch (e.key) {
+        case " ": {
+          setSpace(false);
         }
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.addEventListener("keyup", onKeyUp);
     };
   }, [deleteLayers, history]);
 

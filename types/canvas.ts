@@ -124,6 +124,9 @@ export type CanvasState =
     }
   | {
       mode: CanvasMode.Pencil;
+    }
+  | {
+      mode: CanvasMode.Panning;
     };
 
 // enumerations: specifically listed
@@ -135,6 +138,7 @@ export enum CanvasMode {
   Inserting, // 挿入
   Resizing, // 変形
   Pencil, // ペン
+  Panning, // 画面を動かす
 }
 
 export type Layer =
